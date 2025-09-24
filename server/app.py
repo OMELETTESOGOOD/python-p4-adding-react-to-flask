@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_migrate import Migrate
 
@@ -11,63 +11,47 @@ app.json.compact = False
 
 CORS(app)
 migrate = Migrate(app, db)
-
 db.init_app(app)
 
+
+# GET all messages / POST new message
 @app.route('/messages', methods=['GET', 'POST'])
 def messages():
     if request.method == 'GET':
-        messages = Message.query.order_by('created_at').all()
+        messages = Message.query.order_by(Message.created_at).all()
+        return jsonify([m.to_dict() for m in messages]), 200
 
-        response = make_response(
-            jsonify([message.to_dict() for message in messages]),
-            200,
-        )
-    
     elif request.method == 'POST':
         data = request.get_json()
         message = Message(
-            body=data['body'],
-            username=data['username']
+            body=data.get('body'),
+            username=data.get('username')
         )
-
         db.session.add(message)
         db.session.commit()
+        return jsonify(message.to_dict()), 201
 
-        response = make_response(
-            jsonify(message.to_dict()),
-            201,
-        )
 
-    return response
-
+# PATCH or DELETE a message by ID
 @app.route('/messages/<int:id>', methods=['PATCH', 'DELETE'])
 def messages_by_id(id):
     message = Message.query.filter_by(id=id).first()
 
+    if not message:
+        return jsonify({'error': 'Message not found'}), 404
+
     if request.method == 'PATCH':
         data = request.get_json()
-        for attr in data:
-            setattr(message, attr, data[attr])
-            
-        db.session.add(message)
+        for attr, value in data.items():
+            setattr(message, attr, value)
         db.session.commit()
-
-        response = make_response(
-            jsonify(message.to_dict()),
-            200,
-        )
+        return jsonify(message.to_dict()), 200
 
     elif request.method == 'DELETE':
         db.session.delete(message)
         db.session.commit()
+        return jsonify({'deleted': True}), 200
 
-        response = make_response(
-            jsonify({'deleted': True}),
-            200,
-        )
-
-    return response
 
 if __name__ == "__main__":
-    app.run(port=5555)
+    app.run(port=5555, debug=True)
